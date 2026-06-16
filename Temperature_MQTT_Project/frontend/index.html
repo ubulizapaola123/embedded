@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Temperature Dashboard | Uwase Teta Paola</title>
+    <!-- Include Paho MQTT JS Client from CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js"
+        type="text/javascript"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --glass-bg: rgba(30, 41, 59, 0.7);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --accent-glow: rgba(56, 189, 248, 0.5);
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            background-image:
+                radial-gradient(at 0% 0%, hsla(253, 16%, 7%, 1) 0, transparent 50%),
+                radial-gradient(at 50% 0%, hsla(225, 39%, 30%, 0.3) 0, transparent 50%),
+                radial-gradient(at 100% 0%, hsla(339, 49%, 30%, 0.3) 0, transparent 50%);
+            background-attachment: fixed;
+            color: var(--text-primary);
+            font-family: var(--font-family);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .dashboard-container {
+            background: var(--glass-bg);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 400px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px var(--accent-glow);
+            animation: fadeIn 1s ease-out;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin: 0 0 0.5rem 0;
+            letter-spacing: -0.025em;
+        }
+
+        .header p {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+            margin: 0;
+        }
+
+        .temperature-display {
+            position: relative;
+            width: 250px;
+            height: 250px;
+            margin: 0 auto 2rem auto;
+            border-radius: 50%;
+            background: conic-gradient(from 180deg at 50% 50%, #0284c7 0deg, #38bdf8 180deg, #0ea5e9 360deg);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.5), 0 0 30px rgba(56, 189, 248, 0.4);
+            transition: all 0.3s ease;
+        }
+
+        .temperature-display::before {
+            content: '';
+            position: absolute;
+            inset: 8px;
+            border-radius: 50%;
+            background: var(--bg-color);
+            z-index: 1;
+        }
+
+        .temp-value {
+            position: relative;
+            z-index: 2;
+            font-size: 4.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #38bdf8, #818cf8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 20px rgba(56, 189, 248, 0.2);
+            transition: all 0.3s ease;
+        }
+
+        .temp-unit {
+            font-size: 1.5rem;
+            color: var(--text-secondary);
+            vertical-align: top;
+            margin-left: 4px;
+        }
+
+        .status-indicator {
+            display: inline-flex;
+            align-items: center;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 9999px;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #ef4444;
+            /* Red for disconnected */
+            margin-right: 8px;
+            box-shadow: 0 0 10px #ef4444;
+            transition: background-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .status-dot.connected {
+            background-color: #10b981;
+            /* Green for connected */
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        .info-panel {
+            margin-top: 1.5rem;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 1rem;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+        }
+
+        .info-panel span {
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        @keyframes fadeIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Pulse animation for data arrival */
+        @keyframes pulseData {
+            0% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.05);
+            }
+
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .data-arrived {
+            animation: pulseData 0.3s ease-out;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+        <div class="header">
+            <h1>Temperature Monitor</h1>
+            <p>Candidate: Uwase Teta Paola (user276)</p>
+        </div>
+
+        <div class="temperature-display" id="gauge">
+            <div class="temp-value" id="temp-display">--<span class="temp-unit">°C</span></div>
+        </div>
+
+        <div class="status-indicator">
+            <div class="status-dot" id="status-dot"></div>
+            <span id="status-text">Connecting to Server...</span>
+        </div>
+
+        <div class="info-panel">
+            <div>Broker: <span>157.173.101.159:24077</span></div>
+            <div style="margin-top: 4px;">Topic: <span
+                    style="word-break: break-all;">spe/uwase_teta_paola/temperature</span></div>
+        </div>
+    </div>
+
+    <script>
+        // VPS Connection Details
+        const broker_ip = "157.173.101.159";
+        const broker_port = 9001; // WebSocket Port for User 01
+        const topic = "spe/uwase_teta_paola/temperature";
+
+        // Generate a random client ID
+        const clientId = "web_client_" + Math.random().toString(16).substr(2, 8);
+
+        // UI Elements
+        const tempDisplay = document.getElementById("temp-display");
+        const statusDot = document.getElementById("status-dot");
+        const statusText = document.getElementById("status-text");
+        const gauge = document.getElementById("gauge");
+
+        // Create an MQTT client instance
+        const client = new Paho.MQTT.Client(broker_ip, broker_port, clientId);
+
+        // Set callback handlers
+        client.onConnectionLost = onConnectionLost;
+        client.onMessageArrived = onMessageArrived;
+
+        // Connect the client
+        function connectMQTT() {
+            client.connect({
+                onSuccess: onConnect,
+                onFailure: onFailure,
+                useSSL: false, // Set to true if the VPS has SSL configured for websockets
+                reconnect: true
+            });
+        }
+
+        // Called when the client connects
+        function onConnect() {
+            console.log("Connected to VPS MQTT Broker via WebSockets!");
+            statusDot.classList.add("connected");
+            statusText.innerText = "Connected & Listening";
+
+            // Subscribe to the designated topic
+            client.subscribe(topic);
+        }
+
+        // Called if the connection fails to establish
+        function onFailure(responseObject) {
+            console.error("Failed to connect: " + responseObject.errorMessage);
+            statusText.innerText = "Connection Failed. Retrying...";
+            // Client automatically attempts reconnect if reconnect: true is set
+        }
+
+        // Called when the client loses its connection
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                console.warn("Connection lost: " + responseObject.errorMessage);
+                statusDot.classList.remove("connected");
+                statusText.innerText = "Disconnected. Reconnecting...";
+            }
+        }
+
+        // Called when a message arrives
+        function onMessageArrived(message) {
+            const temperature = parseFloat(message.payloadString);
+
+            if (!isNaN(temperature)) {
+                console.log("New Temperature: " + temperature);
+                // Update the UI
+                tempDisplay.innerHTML = temperature.toFixed(1) + '<span class="temp-unit">°C</span>';
+
+                // Add a pulse animation to show data activity
+                gauge.classList.remove('data-arrived');
+                void gauge.offsetWidth; // Trigger reflow to restart animation
+                gauge.classList.add('data-arrived');
+
+                // Optional: Change color based on temperature (Hotter = Red, Colder = Blue)
+                if (temperature > 30) {
+                    gauge.style.background = 'conic-gradient(from 180deg at 50% 50%, #f43f5e 0deg, #fb7185 180deg, #fda4af 360deg)';
+                } else if (temperature < 15) {
+                    gauge.style.background = 'conic-gradient(from 180deg at 50% 50%, #3b82f6 0deg, #93c5fd 180deg, #bfdbfe 360deg)';
+                } else {
+                    // Default Blue/Cyan for normal room temps
+                    gauge.style.background = 'conic-gradient(from 180deg at 50% 50%, #0284c7 0deg, #38bdf8 180deg, #0ea5e9 360deg)';
+                }
+            }
+        }
+
+        // Start connection process when page loads
+        window.onload = connectMQTT;
+    </script>
+</body>
+
+</html>
